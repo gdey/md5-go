@@ -1,0 +1,4 @@
+md5_hash, filename
+"d41d8cd98f00b204e9800998ecf8427e", "empty.txt"
+"b1946ac92492d2347c6235b4d2611184", "hello.txt"
+"9f40725ceb305d49f294c89fd36a808a", "random_4kb.bin"
