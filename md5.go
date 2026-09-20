@@ -68,13 +68,13 @@ func (p *process) Input(r io.Reader) error {
 			}
 			return err
 		}
+
 		if n == 0 {
 			panic("did not expect to read zero")
 		}
-		for _, b := range p._buf[:n] {
-			p.Byte(b)
-			p.count++
-		}
+
+		p.Byte(p._buf[:n]...)
+		p.count += int64(n)
 	}
 
 	// we've read the entire message - now we have to finalize it by padding
@@ -111,14 +111,61 @@ func (p *process) Input(r io.Reader) error {
 	return nil
 }
 
-func (p *process) Byte(b byte) {
-	//p.log(DEBUG, "processing byte: %v", b)
-	p.block[p.idx] = b
-	p.idx++
-	if p.idx == blockSize {
+func (p *process) Byte(bs ...byte) {
+	lnBS := len(bs)
+	if lnBS == 0 {
+		return
+	}
+
+	if lnBS == 1 {
+		p.block[p.idx] = bs[0]
+		p.idx++
+		if p.idx == blockSize {
+			p.Block()
+			p.idx = 0
+		}
+		return
+	}
+
+	// lbIdx by construction has to be 2+
+	lbIdx := lnBS + p.idx
+	// fits cannot be (blockSize - 1)+
+	fits := blockSize - lbIdx
+
+	// fits is only ever zero if there is only blocksize of bytes left in bs
+	if fits == 0 {
+		copy(p.block[p.idx:], bs)
 		p.Block()
 		p.idx = 0
+		return
 	}
+
+	if fits > 0 {
+		copy(p.block[p.idx:], bs)
+		p.idx = lbIdx
+		return
+	}
+
+	rBlkLen := blockSize - p.idx
+
+	copy(p.block[p.idx:], bs)
+	p.Block()
+	p.idx = 0
+	bs = bs[rBlkLen:]
+	fits += rBlkLen
+	lnBS = len(bs)
+
+	for lnBS >= blockSize {
+		copy(p.block[:], bs)
+		p.Block()
+		fits += blockSize
+		bs = bs[blockSize:]
+		lnBS -= blockSize
+	}
+
+	copy(p.block[:], bs)
+	p.idx = lnBS
+
 }
 
 func (p *process) Block() {
