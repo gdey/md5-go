@@ -58,7 +58,6 @@ func (p *process) Code() (buf [16]byte) {
 }
 
 func (p *process) Input(r io.Reader) error {
-
 	p.start = 0
 	for {
 		n, err := r.Read(p._buf[p.idx:])
@@ -77,39 +76,28 @@ func (p *process) Input(r io.Reader) error {
 		p.count += int64(n)
 	}
 
-	// we've read the entire message - now we have to finalize it by padding
-	// it and appending the length
-
-	// pad it with 1 and then a bunch of 0s
-	p.Byte(0x80)
+	// p.start is guaranteed to be 0 here
+	p._buf[p.idx] = 0x80
+	p.idx++
 
 	if p.idx >= (blockSize - 8) {
-		// Make sure there is space for the 8 we need to append
-		copy(p._buf[p.idx:(2*blockSize-p.idx)], zeros)
+		// Fill remainder with zeros and process
+		copy(p._buf[p.idx:blockSize], zeros[:blockSize-p.idx])
 		p.Block()
-		p.start = blockSize
+		// Fill second block up to length field
+		copy(p._buf[0:blockSize-8], zeros[:blockSize-8])
+		p.idx = blockSize - 8
 	} else {
-		copy(p._buf[p.idx:blockSize], zeros)
+		// Fill from current index to blockSize - 8
+		copy(p._buf[p.idx:blockSize-8], zeros[:blockSize-8-p.idx])
+		p.idx = blockSize - 8
 	}
-	p.idx = (blockSize - 8)
 
-	// append original length in bits mod 2^64 to message
-	// turn the byte length into 2 numbers - high bits and low bits
-	lowBits := uint32(p.count << 3)
-	highBits := uint32(p.count >> (32 - 3))
-
-	// Write 8 bytes directly to buffer without going through Byte()
-	for i := range 4 {
-		p._buf[p.start+p.idx] = byte(lowBits >> (i * 8) & 0xff)
-		p.idx++
-	}
-	for i := range 4 {
-		p._buf[p.start+p.idx] = byte(highBits >> (i * 8) & 0xff)
-		p.idx++
-	}
+	// Append original length in bits (little-endian 64-bit)
+	lengthBits := p.count << 3
+	binary.LittleEndian.PutUint64(p._buf[blockSize-8:], uint64(lengthBits))
 
 	p.Block()
-
 	return nil
 }
 
@@ -164,17 +152,6 @@ func (p *process) AmendBytes(n int) {
 
 	p.idx = n
 	p.start = 0
-}
-
-func (p *process) Byte(b byte) {
-
-	p._buf[p.start+p.idx] = b
-	p.idx++
-	if p.idx == blockSize {
-		p.Block()
-		p.idx = 0
-		p.start = 0
-	}
 }
 
 func (p *process) Block() {
@@ -274,7 +251,8 @@ var (
 		0x6fa87e4f, 0xfe2ce6e0, 0xa3014314, 0x4e0811a1,
 		0xf7537e82, 0xbd3af235, 0x2ad7d2bb, 0xeb86d391,
 	}
-	zeros = make([]byte, 2*blockSize)
+	zerosArray = [2 * blockSize]byte{}
+	zeros      = zerosArray[:]
 )
 
 const (
