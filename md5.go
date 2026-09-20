@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"io"
+	"math/bits"
 )
 
 type Options struct {
@@ -204,7 +205,7 @@ func (p *process) Block() {
 		A = D
 		D = C
 		C = B
-		B += (F << s[ii]) | (F >> (32 - s[ii]))
+		B += bits.RotateLeft32(F, int(s[ii]))
 	}
 
 	// Round 2
@@ -215,7 +216,7 @@ func (p *process) Block() {
 		A = D
 		D = C
 		C = B
-		B += (F << s[ii]) | (F >> (32 - s[ii]))
+		B += bits.RotateLeft32(F, int(s[ii]))
 	}
 
 	// Round 3
@@ -226,7 +227,7 @@ func (p *process) Block() {
 		A = D
 		D = C
 		C = B
-		B += (F << s[ii]) | (F >> (32 - s[ii]))
+		B += bits.RotateLeft32(F, int(s[ii]))
 	}
 
 	// Round 4
@@ -237,7 +238,7 @@ func (p *process) Block() {
 		A = D
 		D = C
 		C = B
-		B += (F << s[ii]) | (F >> (32 - s[ii]))
+		B += bits.RotateLeft32(F, int(s[ii]))
 	}
 
 	p.a0 += A
