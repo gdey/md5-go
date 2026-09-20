@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/hex"
 	"flag"
 	"fmt"
 	"os"
@@ -56,5 +57,6 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Failed to hash file: %s\n\t%v\n", filename, err)
 		os.Exit(2)
 	}
-	fmt.Println(code)
+
+	fmt.Println(hex.EncodeToString(code[:]), filename)
 }

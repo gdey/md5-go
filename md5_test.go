@@ -1,6 +1,7 @@
 package md5
 
 import (
+	"encoding/hex"
 	"log"
 	"os"
 	"path/filepath"
@@ -12,21 +13,6 @@ func BenchmarkHash(b *testing.B) {
 		Code     string
 		Filename string
 	}
-	fn := func(tc tcase) func(b *testing.B) {
-		fd, err := os.Open(filepath.Join("testdata", tc.Filename))
-		if err != nil {
-			b.Fatalf("Failed to open test file: %v", err)
-		}
-		return func(b *testing.B) {
-			defer fd.Close()
-
-			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
-				fd.Seek(0, 0)
-				Hash(fd, nil)
-			}
-		}
-	}
 
 	tests := []tcase{
 		{Code: "d41d8cd98f00b204e9800998ecf8427e", Filename: "empty.txt"},
@@ -35,7 +21,19 @@ func BenchmarkHash(b *testing.B) {
 	}
 
 	for _, tc := range tests {
-		b.Run(tc.Filename, fn(tc))
+		b.Run(tc.Filename, func(b *testing.B) {
+			fd, err := os.Open(filepath.Join("testdata", tc.Filename))
+			if err != nil {
+				b.Fatalf("Failed to open test file: %v", err)
+			}
+			defer fd.Close()
+
+			b.ResetTimer()
+			for b.Loop() {
+				fd.Seek(0, 0)
+				Hash(fd, nil)
+			}
+		})
 	}
 }
 
@@ -60,7 +58,8 @@ func TestHash(t *testing.T) {
 				return
 			}
 			t.Logf("Got Code: '%v'", code)
-			if code != tc.Code {
+			gotCode := hex.EncodeToString(code[:])
+			if gotCode != tc.Code {
 				t.Errorf("code, expected '%v' got '%v'", tc.Code, code)
 				return
 			}

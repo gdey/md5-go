@@ -1,42 +1,28 @@
 package md5
 
 import (
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
 	"os"
-	"strings"
 )
 
 type Options struct {
 	Debug LogLevel
 }
 
-func (o *Options) debugFn() func(lvl LogLevel, format string, args ...any) {
-	if o == nil || o.Debug == 0 {
-		return nil
-	}
-	return func(lvl LogLevel, format string, args ...any) {
-		if lvl > o.Debug {
-			return
-		}
-		fmt.Fprintf(os.Stderr, format+"\n", args...)
-	}
-}
-
-func Hash(r io.Reader, opts *Options) (string, error) {
+func Hash(r io.Reader, opts *Options) (code [16]byte, err error) {
 	p := process{
-		debug: opts.debugFn(),
-		a0:    a0,
-		b0:    b0,
-		c0:    c0,
-		d0:    d0,
+		a0: a0,
+		b0: b0,
+		c0: c0,
+		d0: d0,
 	}
-	err := p.Input(r)
+	err = p.Input(r)
 	if err != nil {
-		return "", err
+		return code, err
 	}
-
 	return p.Code(), nil
 }
 
@@ -46,27 +32,19 @@ type process struct {
 	block [blockSize]byte
 	idx   int
 	count int64
-	debug func(lvl LogLevel, format string, args ...any)
 	a0    uint32
 	b0    uint32
 	c0    uint32
 	d0    uint32
 }
 
-func (p *process) Code() string {
+func (p *process) Code() (buf [16]byte) {
 
-	var (
-		words = []uint32{p.a0, p.b0, p.c0, p.d0}
-		buf   strings.Builder
-	)
-
-	for _, word := range words {
-		for j := range 4 {
-			b := word >> (j * 8) & 0xff
-			fmt.Fprintf(&buf, "%02x", b)
-		}
-	}
-	return buf.String()
+	binary.LittleEndian.PutUint32(buf[0:4], p.a0)
+	binary.LittleEndian.PutUint32(buf[4:8], p.b0)
+	binary.LittleEndian.PutUint32(buf[8:12], p.c0)
+	binary.LittleEndian.PutUint32(buf[12:16], p.d0)
+	return buf
 }
 
 func (p *process) Input(r io.Reader) error {
@@ -93,7 +71,9 @@ func (p *process) Input(r io.Reader) error {
 
 	// pad it with 1 and then a bunch of 0s
 	p.Byte(0x80)
-	for p.idx != 56 {
+
+	// Make sure there is space for the 8 we need to append
+	for p.idx != (blockSize - 8) {
 		p.Byte(0)
 	}
 
@@ -118,26 +98,6 @@ func (p *process) Input(r io.Reader) error {
 		os.Exit(3)
 	}
 	return nil
-}
-
-func (p *process) log(lvl LogLevel, format string, args ...any) {
-	if p.debug == nil {
-		return
-	}
-	p.debug(lvl, format, args...)
-}
-
-func (p *process) zeroFillBlock(num int) {
-	p.log(DEBUG, "number of zero to fill: %v -- %v", num, p.idx)
-	if p.idx+num >= blockSize {
-		num = blockSize - p.idx
-	}
-	p.log(DEBUG, "number of zero to actually fill: %v", num)
-	for i := range num {
-		p.block[p.idx+i] = 0
-	}
-	p.idx += num
-	p.log(DEBUG, "idx is now at: %v", p.idx)
 }
 
 func (p *process) Byte(b byte) {
