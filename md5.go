@@ -14,7 +14,7 @@ type Options struct {
 
 func (o *Options) buf() []byte {
 	if o == nil || o.Buf == nil {
-		return make([]byte, blockSize)
+		return make([]byte, 2*blockSize)
 	}
 	return o.Buf
 }
@@ -40,7 +40,7 @@ func Hash(r io.Reader, opts *Options) (code [16]byte, err error) {
 
 type process struct {
 	_buf  []byte
-	block [blockSize]byte
+	start int
 	idx   int
 	count int64
 	a0    uint32
@@ -61,7 +61,7 @@ func (p *process) Code() (buf [16]byte) {
 func (p *process) Input(r io.Reader) error {
 
 	for {
-		n, err := r.Read(p._buf[:])
+		n, err := r.Read(p._buf[p.start+p.idx:])
 		if err != nil {
 			if errors.Is(err, io.EOF) {
 				break
@@ -73,7 +73,7 @@ func (p *process) Input(r io.Reader) error {
 			panic("did not expect to read zero")
 		}
 
-		p.Byte(p._buf[:n]...)
+		p.AmendBytes(n)
 		p.count += int64(n)
 	}
 
@@ -109,14 +109,13 @@ func (p *process) Input(r io.Reader) error {
 	return nil
 }
 
-func (p *process) Byte(bs ...byte) {
-	lnBS := len(bs)
-	if lnBS == 0 {
+func (p *process) AmendBytes(n int) {
+	if n == 0 {
 		return
 	}
+	p.start = 0
 
-	if lnBS == 1 {
-		p.block[p.idx] = bs[0]
+	if n == 1 {
 		p.idx++
 		if p.idx == blockSize {
 			p.Block()
@@ -126,44 +125,52 @@ func (p *process) Byte(bs ...byte) {
 	}
 
 	// lbIdx by construction has to be 2+
-	lbIdx := lnBS + p.idx
+	lbIdx := n + p.idx
 	// fits cannot be (blockSize - 1)+
 	fits := blockSize - lbIdx
 
 	// fits is only ever zero if there is only blocksize of bytes left in bs
 	if fits == 0 {
-		copy(p.block[p.idx:], bs)
 		p.Block()
 		p.idx = 0
 		return
 	}
 
 	if fits > 0 {
-		copy(p.block[p.idx:], bs)
 		p.idx = lbIdx
 		return
 	}
 
 	rBlkLen := blockSize - p.idx
 
-	copy(p.block[p.idx:], bs)
 	p.Block()
+	p.start = p.idx
 	p.idx = 0
-	bs = bs[rBlkLen:]
-	fits += rBlkLen
-	lnBS = len(bs)
 
-	for lnBS >= blockSize {
-		copy(p.block[:], bs)
+	n -= rBlkLen
+
+	for n >= blockSize {
+		p.start += blockSize
 		p.Block()
-		fits += blockSize
-		bs = bs[blockSize:]
-		lnBS -= blockSize
+		n -= blockSize
 	}
 
-	copy(p.block[:], bs)
-	p.idx = lnBS
+	// need to copy the reest to the begining
+	copy(p._buf[0:blockSize], p._buf[p.start:])
 
+	p.idx = n
+	p.start = 0
+}
+
+func (p *process) Byte(b byte) {
+
+	p._buf[p.start+p.idx] = b
+	p.idx++
+	if p.idx == blockSize {
+		p.Block()
+		p.idx = 0
+		p.start = 0
+	}
 }
 
 func (p *process) Block() {
@@ -172,18 +179,19 @@ func (p *process) Block() {
 		M [16]uint32
 
 		// Initialize hash value for this chunk:
-		A = p.a0
-		B = p.b0
-		C = p.c0
-		D = p.d0
+		A    = p.a0
+		B    = p.b0
+		C    = p.c0
+		D    = p.d0
+		_buf = p._buf[p.start:]
 	)
 
 	// break chunk into sixteen 32-bit words M[j], 0 ≤ j ≤ 15
 
 	for i := range len(M) {
 		j := i * 4
-		M[i] = uint32(p.block[j]) | uint32(p.block[j+1])<<8 |
-			uint32(p.block[j+2])<<16 | uint32(p.block[j+3])<<24
+		M[i] = uint32(_buf[j]) | uint32(_buf[j+1])<<8 |
+			uint32(_buf[j+2])<<16 | uint32(_buf[j+3])<<24
 	}
 
 	for ii := range blockSize {
