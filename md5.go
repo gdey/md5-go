@@ -84,9 +84,14 @@ func (p *process) Input(r io.Reader) error {
 	p.Byte(0x80)
 
 	// Make sure there is space for the 8 we need to append
-	for p.idx != (blockSize - 8) {
-		p.Byte(0)
+	copy(p._buf[p.start+p.idx:p.start+(blockSize-p.idx)], zeros)
+
+	if p.idx >= (blockSize - 8) {
+		p.Block()
+		copy(p._buf[0:], zeros)
+		p.start = 0
 	}
+	p.idx = (blockSize - 8)
 
 	// append original length in bits mod 2^64 to message
 	// turn the byte length into 2 numbers - high bits and low bits
@@ -256,6 +261,7 @@ var (
 		0x6fa87e4f, 0xfe2ce6e0, 0xa3014314, 0x4e0811a1,
 		0xf7537e82, 0xbd3af235, 0x2ad7d2bb, 0xeb86d391,
 	}
+	zeros = make([]byte, blockSize)
 )
 
 const (
