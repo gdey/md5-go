@@ -1,46 +1,48 @@
 package md5
 
 import (
+	"bytes"
 	"encoding/hex"
 	"log"
 	"os"
 	"path/filepath"
 	"testing"
+
+	_ "embed"
+)
+
+var (
+	//go:embed testdata/empty.txt
+	benchmarkEmptyTxt []byte
+
+	//go:embed testdata/hello.txt
+	benchmarkHelloTxt []byte
+
+	//go:embed testdata/random_4kb.bin
+	benchmarkRandom4KBBin []byte
 )
 
 func BenchmarkHash(b *testing.B) {
 	type tcase struct {
-		Code     string
 		Filename string
+		data     []byte
 	}
 
 	tests := []tcase{
-		{Code: "d41d8cd98f00b204e9800998ecf8427e", Filename: "empty.txt"},
-		{Code: "b1946ac92492d2347c6235b4d2611184", Filename: "hello.txt"},
-		{Code: "9f40725ceb305d49f294c89fd36a808a", Filename: "random_4kb.bin"},
+		{data: benchmarkEmptyTxt, Filename: "empty.txt"},
+		{data: benchmarkHelloTxt, Filename: "hello.txt"},
+		{data: benchmarkRandom4KBBin, Filename: "random_4kb.bin"},
 	}
 
 	for _, tc := range tests {
 		b.Run(tc.Filename, func(b *testing.B) {
-			var filename string
-			if tc.Filename[0] != '/' {
-				filename = filepath.Join("testdata", tc.Filename)
-			} else {
-				filename = tc.Filename
-			}
-			fd, err := os.Open(filename)
-			if err != nil {
-				b.Fatalf("Failed to open test file: %v", err)
-			}
-			defer fd.Close()
+
 			buf := make([]byte, blockSize*4*1024)
+			r := bytes.NewReader(tc.data)
 
 			b.ResetTimer()
 			for b.Loop() {
-				fd.Seek(0, 0)
-				Hash(fd, &Options{
-					Buf: buf,
-				})
+				Hash(r, &Options{Buf: buf}) // ← In-memory reader
 			}
 		})
 	}
