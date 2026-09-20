@@ -9,26 +9,38 @@ import (
 )
 
 type Options struct {
+	Buf   []byte
 	Debug LogLevel
+}
+
+func (o *Options) buf() []byte {
+	if o == nil || o.Buf == nil {
+		return make([]byte, blockSize)
+	}
+	return o.Buf
 }
 
 func Hash(r io.Reader, opts *Options) (code [16]byte, err error) {
 	p := process{
-		a0: a0,
-		b0: b0,
-		c0: c0,
-		d0: d0,
+		a0:   a0,
+		b0:   b0,
+		c0:   c0,
+		d0:   d0,
+		_buf: opts.buf(),
 	}
+
 	err = p.Input(r)
 	if err != nil {
 		return code, err
 	}
+
 	return p.Code(), nil
 }
 
 // //////  Process functions ////////////////////////////////////////
 
 type process struct {
+	_buf  []byte
 	block [blockSize]byte
 	idx   int
 	count int64
@@ -48,19 +60,19 @@ func (p *process) Code() (buf [16]byte) {
 }
 
 func (p *process) Input(r io.Reader) error {
-	var (
-		buf [blockSize]byte
-	)
 
 	for {
-		n, err := r.Read(buf[:])
+		n, err := r.Read(p._buf[:])
 		if err != nil {
 			if errors.Is(err, io.EOF) {
 				break
 			}
 			return err
 		}
-		for _, b := range buf[:n] {
+		if n == 0 {
+			panic("did not expect to read zero")
+		}
+		for _, b := range p._buf[:n] {
 			p.Byte(b)
 			p.count++
 		}

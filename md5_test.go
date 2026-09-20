@@ -22,16 +22,25 @@ func BenchmarkHash(b *testing.B) {
 
 	for _, tc := range tests {
 		b.Run(tc.Filename, func(b *testing.B) {
-			fd, err := os.Open(filepath.Join("testdata", tc.Filename))
+			var filename string
+			if tc.Filename[0] != '/' {
+				filename = filepath.Join("testdata", tc.Filename)
+			} else {
+				filename = tc.Filename
+			}
+			fd, err := os.Open(filename)
 			if err != nil {
 				b.Fatalf("Failed to open test file: %v", err)
 			}
 			defer fd.Close()
+			buf := make([]byte, blockSize*4*1024)
 
 			b.ResetTimer()
 			for b.Loop() {
 				fd.Seek(0, 0)
-				Hash(fd, nil)
+				Hash(fd, &Options{
+					Buf: buf,
+				})
 			}
 		})
 	}

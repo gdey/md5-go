@@ -12,10 +12,13 @@ import (
 
 func main() {
 	var (
-		debug uint8
-		fd    = os.Stdin
-		err   error
+		debug   uint8
+		fd      = os.Stdin
+		err     error
+		memMult int
 	)
+
+	flag.IntVar(&memMult, "memory", 4, "multiple of 1024 to allocate for memory")
 
 	flag.BoolFunc("debug", "set the amount of debug message to log", func(s string) error {
 		if s == "true" {
@@ -51,6 +54,7 @@ func main() {
 	}
 
 	code, err := md5.Hash(fd, &md5.Options{
+		Buf:   make([]byte, 64*memMult*1024),
 		Debug: md5.INFO,
 	})
 	if err != nil {
