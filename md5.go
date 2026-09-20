@@ -96,12 +96,10 @@ func (p *process) Input(r io.Reader) error {
 	// encode the full 64bit int (bits length) as little endian
 	for i := range 4 {
 		b := byte(lowBits >> (i * 8) & 0xff)
-		//p.log(DEBUG, "lowBits[%d]=%u\n", i, b)
 		p.Byte(b)
 	}
 	for i := range 4 {
 		b := byte(highBits >> (i * 8) & 0xff)
-		//p.log(DEBUG, "highBits[%d]=%u\n", i, b)
 		p.Byte(b)
 	}
 	if p.idx != 0 {
