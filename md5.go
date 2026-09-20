@@ -9,8 +9,7 @@ import (
 )
 
 type Options struct {
-	Buf   []byte
-	Debug LogLevel
+	Buf []byte
 }
 
 func (o *Options) buf() []byte {
@@ -123,7 +122,6 @@ func (p *process) Byte(b byte) {
 }
 
 func (p *process) Block() {
-	//p.log(DEBUG, "processing block")
 
 	var (
 		M [16]uint32
@@ -214,14 +212,4 @@ const (
 	d0 = uint32(0x10325476)
 
 	blockSize = 64
-)
-
-type LogLevel uint8
-
-const (
-	NONE = LogLevel(iota)
-	ERROR
-	WARN
-	INFO
-	DEBUG
 )
