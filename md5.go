@@ -3,9 +3,7 @@ package md5
 import (
 	"encoding/binary"
 	"errors"
-	"fmt"
 	"io"
-	"os"
 )
 
 type Options struct {
@@ -60,8 +58,9 @@ func (p *process) Code() (buf [16]byte) {
 
 func (p *process) Input(r io.Reader) error {
 
+	p.start = 0
 	for {
-		n, err := r.Read(p._buf[p.start+p.idx:])
+		n, err := r.Read(p._buf[p.idx:])
 		if err != nil {
 			if errors.Is(err, io.EOF) {
 				break
@@ -83,13 +82,13 @@ func (p *process) Input(r io.Reader) error {
 	// pad it with 1 and then a bunch of 0s
 	p.Byte(0x80)
 
-	// Make sure there is space for the 8 we need to append
-	copy(p._buf[p.start+p.idx:p.start+(blockSize-p.idx)], zeros)
-
 	if p.idx >= (blockSize - 8) {
+		// Make sure there is space for the 8 we need to append
+		copy(p._buf[p.idx:(2*blockSize-p.idx)], zeros)
 		p.Block()
-		copy(p._buf[0:], zeros)
-		p.start = 0
+		p.start = blockSize
+	} else {
+		copy(p._buf[p.idx:blockSize], zeros)
 	}
 	p.idx = (blockSize - 8)
 
@@ -98,19 +97,18 @@ func (p *process) Input(r io.Reader) error {
 	lowBits := uint32(p.count << 3)
 	highBits := uint32(p.count >> (32 - 3))
 
-	// encode the full 64bit int (bits length) as little endian
+	// Write 8 bytes directly to buffer without going through Byte()
 	for i := range 4 {
-		b := byte(lowBits >> (i * 8) & 0xff)
-		p.Byte(b)
+		p._buf[p.start+p.idx] = byte(lowBits >> (i * 8) & 0xff)
+		p.idx++
 	}
 	for i := range 4 {
-		b := byte(highBits >> (i * 8) & 0xff)
-		p.Byte(b)
+		p._buf[p.start+p.idx] = byte(highBits >> (i * 8) & 0xff)
+		p.idx++
 	}
-	if p.idx != 0 {
-		fmt.Fprintf(os.Stderr, "uh oh lol bad block index: %v\n", p.count)
-		os.Exit(3)
-	}
+
+	p.Block()
+
 	return nil
 }
 
@@ -199,33 +197,47 @@ func (p *process) Block() {
 			uint32(_buf[j+2])<<16 | uint32(_buf[j+3])<<24
 	}
 
-	for ii := range blockSize {
-		var (
-			i = uint32(ii)
-			F uint32
-			g uint32
-		)
-
-		if i < 16 {
-			F = (B & C) | ((^B) & D)
-			g = (i)
-		} else if i < 32 {
-			F = (D & B) | ((^D) & C)
-			g = (5*i + 1) % 16
-		} else if i < 48 {
-			F = B ^ C ^ D
-			g = (3*i + 5) % 16
-		} else {
-			F = C ^ (B | ^D)
-			g = (7 * i) % 16
-		}
-
-		F = F + A + k[i] + M[g]
+	// Round 1
+	for ii := range 16 {
+		F := (B & C) | ((^B) & D)
+		F = F + A + k[ii] + M[ii]
 		A = D
 		D = C
 		C = B
+		B += (F << s[ii]) | (F >> (32 - s[ii]))
+	}
 
-		B += (F << s[i]) | (F >> (32 - s[i]))
+	// Round 2
+	for ii := 16; ii < 32; ii++ {
+		g := uint32((5*ii + 1) & 15)
+		F := (D & B) | ((^D) & C)
+		F = F + A + k[ii] + M[g]
+		A = D
+		D = C
+		C = B
+		B += (F << s[ii]) | (F >> (32 - s[ii]))
+	}
+
+	// Round 3
+	for ii := 32; ii < 48; ii++ {
+		g := uint32((3*ii + 5) & 15)
+		F := B ^ C ^ D
+		F = F + A + k[ii] + M[g]
+		A = D
+		D = C
+		C = B
+		B += (F << s[ii]) | (F >> (32 - s[ii]))
+	}
+
+	// Round 4
+	for ii := 48; ii < 64; ii++ {
+		g := uint32((7 * ii) & 15)
+		F := C ^ (B | ^D)
+		F = F + A + k[ii] + M[g]
+		A = D
+		D = C
+		C = B
+		B += (F << s[ii]) | (F >> (32 - s[ii]))
 	}
 
 	p.a0 += A
@@ -261,7 +273,7 @@ var (
 		0x6fa87e4f, 0xfe2ce6e0, 0xa3014314, 0x4e0811a1,
 		0xf7537e82, 0xbd3af235, 0x2ad7d2bb, 0xeb86d391,
 	}
-	zeros = make([]byte, blockSize)
+	zeros = make([]byte, 2*blockSize)
 )
 
 const (
