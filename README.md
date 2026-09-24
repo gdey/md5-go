@@ -17,31 +17,34 @@ echo 'hello' | ./md5
 ## Benchmark
 
 ```
-go test -bench=. -benchmem
+❯ go test -bench=BenchmarkHash -benchtime=10s -cpuprofile=cpu.prof github.com/gdey/md5-go
 goos: darwin
 goarch: arm64
 pkg: github.com/gdey/md5-go
 cpu: Apple M2 Max
-BenchmarkHash/empty.txt-12               1446352               829.0 ns/op             0 B/op          0 allocs/op
-BenchmarkHash/hello.txt-12                786171              1273 ns/op               0 B/op          0 allocs/op
-BenchmarkHash/random_4kb.bin-12            79603             15114 ns/op               0 B/op          0 allocs/op
+BenchmarkHash/empty.txt-12              77531754               142.6 ns/op
+BenchmarkHash/hello.txt-12              84914096               142.0 ns/op
+BenchmarkHash/random_4kb.bin-12         85146640               142.0 ns/op
 PASS
-ok      github.com/gdey/md5-go  3.720s
-
+ok      github.com/gdey/md5-go  35.435s
 ```
 
 ## TODO/Wants 
 
 Reading from the stream is slower then the native implementation, tops out around ~265MiB, not sure if that can be improved.
 
-```
-> pv Qwen2.5-Omni-3B-Q8_0.gguf | ./md5 -memory 1024
-3.37GiB 0:00:12 [ 265MiB/s] [====================================================================================================================>] 100%
-6699017cba6687c49be285590d54b32a <<StandardIn>>
 
-> pv Qwen2.5-Omni-3B-Q8_0.gguf | md5sum
-3.37GiB 0:00:06 [ 544MiB/s] [====================================================================================================================>] 100%
+```
+
+❯ pv  Qwen2.5-Omni-3B-GGUF/Qwen2.5-Omni-3B-Q8_0.gguf | time ./md5sum -memory 1024
+3.37GiB 0:00:07 [ 445MiB/s] [========================================================================================================================================================================>] 100%
+6699017cba6687c49be285590d54b32a <<StandardIn>>
+./md5sum -memory 1024  7.58s user 0.17s system 100% cpu 7.748 total
+
+❯ pv  Qwen2.5-Omni-3B-GGUF/Qwen2.5-Omni-3B-Q8_0.gguf | time md5sum
+3.37GiB 0:00:06 [ 548MiB/s] [========================================================================================================================================================================>] 100%
 6699017cba6687c49be285590d54b32a  -
+md5sum  5.95s user 0.22s system 97% cpu 6.299 total
 
 ```
 
